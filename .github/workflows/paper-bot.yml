@@ -1,0 +1,49 @@
+# Online-versionen av paper-boten. Samma kod som den lokala (scripts/paper_run.sh),
+# men loggar i online/logs och dashboarden i docs/index.html (GitHub Pages).
+# Bara papper: inga ordrar, ingen börsnyckel. Enda hemligheten är TYPESAFE_API_KEY.
+name: Paper-bot (online)
+
+on:
+  schedule:
+    # Var 4:e timme, UTC (= 00:02, 04:02 … svensk sommartid). GitHub kan försena några minuter.
+    - cron: "2 2,6,10,14,18,22 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: paper-bot
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BTCLAB_LOG_DIR: online/logs
+      BTCLAB_DASHBOARD: docs/index.html
+      BTCLAB_RUN_TZ: UTC
+      BTCLAB_RUN_HOURS: "2,6,10,14,18,22"
+      TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      - name: Facit för gamla beslut
+        run: uv run python -m lab.paper --settle
+      - name: Nytt papperbeslut
+        run: uv run python -m lab.paper
+      - name: Bygg dashboard
+        if: always()
+        run: uv run python -m lab.dashboard
+      - name: Spara loggar och dashboard
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add online/logs docs
+          git diff --cached --quiet && exit 0
+          git commit -m "Paper-bot: körning $(date -u '+%Y-%m-%d %H:%M') UTC"
+          git pull --rebase
+          git push
