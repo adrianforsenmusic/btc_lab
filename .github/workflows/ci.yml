@@ -1,0 +1,30 @@
+# CI: samma kontroller på varje PR och push till main, oavsett vilken chatt som skrev koden (regelboken §11).
+# Inga hemligheter behövs.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kontroller:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      # test_lenses_never_look_ahead behöver riktiga candles. data/ ligger inte i git, så hämta 12 dagar
+      # (minst 3000 bars) från Binances publika marknadsdata, samma källa som paper-bot.yml. Ingen nyckel.
+      - name: Hämta testdata
+        run: uv run python -m lab.data --days 12
+      - name: Tester
+        run: uv run pytest -q
